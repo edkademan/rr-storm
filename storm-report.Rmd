@@ -1,0 +1,22 @@
+---
+title: "storm-report"
+author: "Ed Kademan"
+date: "December 20, 2015"
+output: html_document
+---
+
+I downloaded the file that this
+[link](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2 "csv file")
+points to. Because it is so large and time-consuming to read I cache the results when I load it into R.
+
+```{r cache = TRUE}
+storm_data <- read.csv("repdata-data-StormData.csv.bz2")
+```
+
+
+```{r}
+names(storm_data)
+storm_data[1:5,1:3]
+```
+
+
