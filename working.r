@@ -12,8 +12,12 @@ read_storm_data <- function() {
            (CROPDMG > 0 & validexp(CROPDMGEXP))) %>%
     mutate(PROPDMG = scale_val(PROPDMG, PROPDMGEXP),
            CROPDMG = scale_val(CROPDMG, CROPDMGEXP),
+
            Event   = simplify_events(EVTYPE),
            Time    = to_time(BGN_DATE))}
+
+
+
 
 p <- function(d)
   d[,c("Event", "EVTYPE", "FATALITIES", "INJURIES",
@@ -71,6 +75,7 @@ costly_plot <- function(d = costly(read_storm_data()), prop = .99) {
     filter(Cumu_Prop <= prop) %>%
     melt(measure.vars = c("Total_Prop", "Total_Crop"))
   ggplot(d) +
+
     geom_bar(aes(Event, value*1e-9, fill = variable),
              stat = "identity", position = "dodge") +
     ylab("billions of dollars") +
@@ -78,4 +83,10 @@ costly_plot <- function(d = costly(read_storm_data()), prop = .99) {
 
 to_time <- function(x)
   as.POSIXct(strptime(as.character(x), format = "%m/%d/%Y"))
+
+
+
+
+
+
 
