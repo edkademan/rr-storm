@@ -40,7 +40,7 @@ simplify_events <- function(events) {
   r[g("fire")] <- "fire"
   r[g("slid|slump|avala")] <- "landslide"
   r[g("fog")] <- "fog"
-  factor(r)}
+  factor(low(r))}
 
 injuries_plot <- function(d = read_storm_data()) {
   d <- filter(d, INJURIES > 0)
@@ -63,19 +63,43 @@ costly <- function(d = read_storm_data()) {
   r$Cumu_Prop <- cumsum(r$Total_Dollar)/sum(r$Total_Dollar)
   r}
 
-costly_plot <- function(d = costly(read_storm_data()), prop = .99) {
-  d <- within(filter(d, Cumu_Prop <= prop),
-              {Event <- low(Event)
-               Event <- factor(Event, levels = rev(Event),
-                               ordered = TRUE)}) %>%
+costly2 <- function(d = read_storm_data())
+  d %>%
+    mutate(Decade =
+             cut(as.numeric(format(Time, format = "%Y")),
+                 breaks = seq(from = 1949, to = 2019, by = 10),
+                 labels = c("50s", "60s", "70s", "80s",
+                            "90s", "00s", "10s"),
+                 ordered_result = TRUE)) %>%
+    group_by(Decade, Event) %>%
+    summarise(Total_Prop = sum(PROPDMG, na.rm = TRUE),
+              Total_Crop = sum(CROPDMG, na.rm = TRUE))
+
+costly_plot <- function(d = read_storm_data(), prop = .999) {
+  d <- within(filter(costly(d), Cumu_Prop <= prop),
+              Event <- factor(Event, levels = rev(Event),
+                               ordered = TRUE)) %>%
     filter(Cumu_Prop <= prop) %>%
     melt(measure.vars = c("Total_Prop", "Total_Crop"))
   ggplot(d) +
-
     geom_bar(aes(Event, value*1e-9, fill = variable),
              stat = "identity", position = "dodge") +
     ylab("billions of dollars") +
     coord_flip()}
+
+costly2_plot <- function(d = read_storm_data(), n = 10) {
+  ordered_event <- costly(d)$Event
+  d <- costly2(d) %>%
+    mutate(Event = factor(low(Event), levels = rev(ordered_event),
+                          ordered = TRUE)) %>%
+    filter(Event %in% ordered_event[1:10]) %>%
+    melt(measure.vars = c("Total_Prop", "Total_Crop"))
+  ggplot(d) +
+    geom_bar(aes(Event, value*1e-9, fill = variable),
+             stat = "identity", position = "dodge") +
+    ylab("billions of dollars") +
+    coord_flip() +
+    facet_wrap(~ Decade)}
 
 to_time <- function(x)
   as.POSIXct(strptime(as.character(x), format = "%m/%d/%Y"))
