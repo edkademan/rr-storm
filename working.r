@@ -12,10 +12,10 @@ read_storm_data <- function() {
            (CROPDMG > 0 & validexp(CROPDMGEXP))) %>%
     mutate(PROPDMG = scale_val(PROPDMG, PROPDMGEXP),
            CROPDMG = scale_val(CROPDMG, CROPDMGEXP),
-           EVENT   = simplify_events(EVTYPE))}
+           Event   = simplify_events(EVTYPE))}
 
 p <- function(d)
-  d[,c("EVENT", "EVTYPE", "FATALITIES", "INJURIES",
+  d[,c("Event", "EVTYPE", "FATALITIES", "INJURIES",
        "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")]
 
 ## This consolidates the event descriptions and fixes spelling
@@ -38,6 +38,7 @@ simplify_events <- function(events) {
   r[g("current|coast|seas|marine|surf|beach|wave|surge|swell")] <- "coastal/seas"
   r[g("fire")] <- "fire"
   r[g("slid|slump|avala")] <- "landslide"
+  r[g("fog")] <- "fog"
   factor(r)}
 
 injuries_plot <- function(d = read_storm_data()) {
@@ -50,3 +51,26 @@ if_plot <- function(d = read_storm_data) {
   ggplot(d) +
     geom_point(aes(INJURIES, FATALITIES))
 }
+
+costly <- function(d = read_storm_data()) {
+  r <- d %>%
+    group_by(Event) %>%
+    summarise(Total_Prop = sum(PROPDMG, na.rm = TRUE),
+              Total_Crop = sum(CROPDMG, na.rm = TRUE)) %>%
+    mutate(Total_Dollar = Total_Prop + Total_Crop) %>%
+    arrange(desc(Total_Dollar))
+  r$Cumu_Prop <- cumsum(r$Total_Dollar)/sum(r$Total_Dollar)
+  r}
+
+costly_plot <- function(d = costly(read_storm_data()), prop = .99) {
+  d <- within(filter(d, Cumu_Prop <= prop),
+              {Event <- low(Event)
+               Event <- factor(Event, levels = rev(Event),
+                               ordered = TRUE)}) %>%
+    filter(Cumu_Prop <= prop) %>%
+    melt(measure.vars = c("Total_Prop", "Total_Crop"))
+  ggplot(d) +
+    geom_bar(aes(Event, value, fill = variable),
+             stat = "identity", position = "dodge") +
+    coord_flip()}
+
