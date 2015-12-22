@@ -12,12 +12,8 @@ read_storm_data <- function() {
            (CROPDMG > 0 & validexp(CROPDMGEXP))) %>%
     mutate(PROPDMG = scale_val(PROPDMG, PROPDMGEXP),
            CROPDMG = scale_val(CROPDMG, CROPDMGEXP),
-
            Event   = simplify_events(EVTYPE),
            Time    = to_time(BGN_DATE))}
-
-
-
 
 p <- function(d)
   d[,c("Event", "EVTYPE", "FATALITIES", "INJURIES",
@@ -83,10 +79,3 @@ costly_plot <- function(d = costly(read_storm_data()), prop = .99) {
 
 to_time <- function(x)
   as.POSIXct(strptime(as.character(x), format = "%m/%d/%Y"))
-
-
-
-
-
-
-
