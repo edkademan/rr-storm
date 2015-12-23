@@ -5,6 +5,23 @@ date: "December 20, 2015"
 output: html_document
 ---
 
+## Synopsis
+
+This report summarizes the economic and human consequences of storms
+and other extreme weather events. The economic data for years prior
+to 2000 are very sparse so I just reported the aggregate dollar
+amount of property and crop damage by event for the entire dataset.
+Floods, hurricanes, tornados and ocean-related events such as storm
+surges and erosion were the most costly over that period.
+
+Tornados, other wind storms, heat and flood caused the most number
+of injuries and fatalities. There were many injury reports from
+early (20th) century years but they mainly involved tornados.
+I suspect that the numbers of deaths and so on due to non-tornado
+events simply didn't get reported.
+
+## Data Processing
+
 I downloaded the file that this
 [link](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2 "csv file")
 points to. Because it is so large and time-consuming to read I cache the results when I load it into R.
@@ -13,10 +30,185 @@ points to. Because it is so large and time-consuming to read I cache the results
 storm_data <- read.csv("repdata-data-StormData.csv.bz2")
 ```
 
+The code below converts the storm data into a form that is easier
+to work with. It discards any records for which there is neither
+injury/fatality information nor readable damage estimates. Then it
+converts the damage estimates to a straightforward dollar amount.
+It also regularizes the events described. There were many `EVTYPE`
+values that belonged together but that differed from on another in
+very insignificant ways. For example, `WINDS` and `HIGH WINDS`.
 
-```{r}
-names(storm_data)
-storm_data[1:5,1:3]
+```{r warning = FALSE, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
+low <- function(x) casefold(as.character(x))
+
+## This consolidates the event descriptions and fixes spelling
+## mistakes. It reduces the number of unique events from 483 to
+## 61.
+simplify_events <- function(events) {
+  r <- as.character(events)
+  g <- function(pat) grep(pat, r, ignore.case = TRUE)
+  r[g("wind")] <- "wind"
+  r[g("thunderstorm|tstm|lightning")] <- "thunderstorm"
+  r[g("rain|shower|burst")] <- "rain"
+  r[g("snow|wintry|winter|blizzard")] <- "snow"
+  r[g("cold|freez|ice|sleet|glaze|low temper|icy|frost")] <- "cold"
+  r[g("hurricane")] <- "hurricane"
+  r[g("torn|funnel")] <- "tornado"
+  r[g("hail")] <- "hail"
+  r[g("flood")] <- "flood"
+  r[g("tropical storm")] <- "tropical storm"
+  r[g("heat|warm weather")] <- "heat"
+  r[g("current|coast|seas|marine|surf|beach|wave|surge|swell")] <- "coastal/seas"
+  r[g("fire")] <- "fire"
+  r[g("slid|slump|avala")] <- "landslide"
+  r[g("fog")] <- "fog"
+  factor(low(r))}
+
+noaa_date_to_decade <- function(x) {
+  ## extract the 4-digit year
+  x <- sub("\\d{1,2}/\\d{1,2}/(\\d{4}).*", "\\1", as.character(x))
+  cut(as.numeric(x),
+      breaks = seq(from = 1949, to = 2019, by = 10),
+      labels = c("50s", "60s", "70s", "80s",
+                 "90s", "00s", "10s"),
+      ordered_result = TRUE)}
+
+read_storm_data <- function(d = readRDS("storm-data.rds")) {
+  validexp <- function(f) low(f) %in% c("k", "m", "b")
+  scale_val <- function(v, s) {
+    i <- v > 0
+    v[i] <- v[i]*c(k = 1e3, m = 1e6, b = 1e9)[low(s[i])]
+    v}
+  d %>%
+    filter(INJURIES > 0 | FATALITIES > 0 |
+           (PROPDMG > 0 & validexp(PROPDMGEXP)) |
+           (CROPDMG > 0 & validexp(CROPDMGEXP))) %>%
+    mutate(PROPDMG = scale_val(PROPDMG, PROPDMGEXP),
+           CROPDMG = scale_val(CROPDMG, CROPDMGEXP),
+           Event   = simplify_events(EVTYPE),
+           Decade  = noaa_date_to_decade(BGN_DATE))}
+
+d <- read_storm_data(storm_data)
 ```
 
+## Results
+
+### Dollar Amounts
+
+We will look at property damage and crop damage first. The plot
+below summarizes those dollar amounts by event for the entire
+6 decades the data cover.
+
+```{r}
+costly <- function(d = read_storm_data()) {
+  r <- d %>%
+    group_by(Event) %>%
+    summarise(Total_Prop = sum(PROPDMG, na.rm = TRUE),
+              Total_Crop = sum(CROPDMG, na.rm = TRUE)) %>%
+    mutate(Total_Dollar = Total_Prop + Total_Crop) %>%
+    arrange(desc(Total_Dollar))
+  r$Cumu_Prop <- cumsum(r$Total_Dollar)/sum(r$Total_Dollar)
+  r}
+
+costly_plot <- function(d = read_storm_data(), prop = .999) {
+  d <- within(filter(costly(d), Cumu_Prop <= prop),
+              Event <- factor(Event, levels = rev(Event),
+                               ordered = TRUE)) %>%
+    filter(Cumu_Prop <= prop) %>%
+    melt(measure.vars = c("Total_Prop", "Total_Crop"))
+  ggplot(d) +
+    geom_bar(aes(Event, value*1e-9, fill = variable),
+             stat = "identity", position = "dodge") +
+    ylab("billions of dollars") +
+    coord_flip()}
+
+costly_plot(d)
+```
+
+Instead of just summarizing all the data by event it is useful
+to look at what the data have to tell us by decade. Keep in mind
+however that we only have 2 years for the very last decade---2010
+and 2011.
+
+```{r}
+costly2 <- function(d = read_storm_data())
+  d %>%
+    group_by(Decade, Event) %>%
+    summarise(Total_Prop = sum(PROPDMG, na.rm = TRUE),
+              Total_Crop = sum(CROPDMG, na.rm = TRUE))
+
+costly2_plot <- function(d = read_storm_data(), n = 10) {
+  ordered_event <- costly(d)$Event
+  d <- costly2(d) %>%
+    mutate(Event = factor(low(Event), levels = rev(ordered_event),
+                          ordered = TRUE)) %>%
+    filter(Event %in% ordered_event[seq(from = 1, to = n)]) %>%
+    melt(measure.vars = c("Total_Prop", "Total_Crop"))
+  ggplot(d) +
+    geom_bar(aes(Event, value*1e-9, fill = variable),
+             stat = "identity", position = "dodge") +
+    ylab("billions of dollars") +
+    coord_flip() +
+    facet_wrap(~ Decade)}
+
+costly2_plot(d)
+```
+
+### Injuries and Deaths
+
+Summarize the numbers of injuries and fatalities overall by event
+and by event/decade.
+
+```{r}
+deadly <- function(d = read_storm_data(),
+                   group_by_vars = ~Event) {
+  d %>%
+    filter(INJURIES > 0 | FATALITIES > 0) %>%
+    group_by_(.dots = group_by_vars) %>%
+    summarise(Injuries   = sum(INJURIES)/1000,
+              Fatalities = sum(FATALITIES)/1000) %>%
+    arrange(desc(Injuries + Fatalities))}
+
+deadly_plot <- function(d = read_storm_data(), n = 20) {
+  d <- within(
+    deadly(d),
+    Event <- factor(Event, levels = rev(Event), ordered = TRUE))
+  d <- melt(d[seq(from = 1, to = n),], id.vars = "Event")
+  ggplot(d) +
+    geom_bar(aes(Event, value), stat = "identity") +
+    facet_wrap(~ variable) + ylab("thousands") +
+    coord_flip()}
+
+deadly2_plot <- function(d = read_storm_data(), n = 10) {
+  ordered_event <- deadly(d)$Event
+  d <- deadly(d, group_by_vars = list(~Decade, ~Event)) %>%
+    mutate(Event = factor(low(Event), levels = rev(ordered_event),
+                          ordered = TRUE)) %>%
+    filter(Event %in% ordered_event[seq(from = 1, to = n)]) %>%
+    melt(measure.vars = c("Injuries", "Fatalities"))
+  ggplot(d) +
+    geom_bar(aes(Event, value, fill = variable),
+             stat = "identity", position = "dodge") +
+    ylab("thousands") +
+    coord_flip() +
+    facet_wrap(~ Decade)}
+```
+
+The plots that the above functions create describe the data as below.
+
+Over all the data:
+
+```{r echo = FALSE}
+deadly_plot(d)
+```
+
+and by decade:
+
+```{r echo = FALSE}
+deadly2_plot(d)
+```
 
