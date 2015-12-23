@@ -126,15 +126,6 @@ costly_plot <- function(d = read_storm_data(), prop = .999) {
     ylab("billions of dollars") +
     coord_flip()}
 
-costly_plot(d)
-```
-
-Instead of just summarizing all the data by event it is useful
-to look at what the data have to tell us by decade. Keep in mind
-however that we only have 2 years for the very last decade---2010
-and 2011.
-
-```{r}
 costly2 <- function(d = read_storm_data())
   d %>%
     group_by(Decade, Event) %>%
@@ -155,7 +146,7 @@ costly2_plot <- function(d = read_storm_data(), n = 10) {
     coord_flip() +
     facet_wrap(~ Decade)}
 
-costly2_plot(d)
+costly_plot(d)
 ```
 
 ### Injuries and Deaths
