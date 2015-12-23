@@ -1,3 +1,7 @@
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+
 low <- function(x) casefold(as.character(x))
 
 read_storm_data <- function() {
@@ -13,7 +17,7 @@ read_storm_data <- function() {
     mutate(PROPDMG = scale_val(PROPDMG, PROPDMGEXP),
            CROPDMG = scale_val(CROPDMG, CROPDMGEXP),
            Event   = simplify_events(EVTYPE),
-           Time    = to_time(BGN_DATE))}
+           Decade  = noaa_date_to_decade(BGN_DATE))}
 
 p <- function(d)
   d[,c("Event", "EVTYPE", "FATALITIES", "INJURIES",
@@ -65,12 +69,6 @@ costly <- function(d = read_storm_data()) {
 
 costly2 <- function(d = read_storm_data())
   d %>%
-    mutate(Decade =
-             cut(as.numeric(format(Time, format = "%Y")),
-                 breaks = seq(from = 1949, to = 2019, by = 10),
-                 labels = c("50s", "60s", "70s", "80s",
-                            "90s", "00s", "10s"),
-                 ordered_result = TRUE)) %>%
     group_by(Decade, Event) %>%
     summarise(Total_Prop = sum(PROPDMG, na.rm = TRUE),
               Total_Crop = sum(CROPDMG, na.rm = TRUE))
@@ -92,7 +90,7 @@ costly2_plot <- function(d = read_storm_data(), n = 10) {
   d <- costly2(d) %>%
     mutate(Event = factor(low(Event), levels = rev(ordered_event),
                           ordered = TRUE)) %>%
-    filter(Event %in% ordered_event[1:10]) %>%
+    filter(Event %in% ordered_event[seq(from = 1, to = n)]) %>%
     melt(measure.vars = c("Total_Prop", "Total_Crop"))
   ggplot(d) +
     geom_bar(aes(Event, value*1e-9, fill = variable),
@@ -101,5 +99,29 @@ costly2_plot <- function(d = read_storm_data(), n = 10) {
     coord_flip() +
     facet_wrap(~ Decade)}
 
-to_time <- function(x)
-  as.POSIXct(strptime(as.character(x), format = "%m/%d/%Y"))
+noaa_date_to_decade <- function(x) {
+  ## extract the 4-digit year
+  x <- sub("\\d{1,2}/\\d{1,2}/(\\d{4}).*", "\\1", as.character(x))
+  cut(as.numeric(x),
+      breaks = seq(from = 1949, to = 2019, by = 10),
+      labels = c("50s", "60s", "70s", "80s",
+                 "90s", "00s", "10s"),
+      ordered_result = TRUE)}
+
+deadly <- function(d = read_storm_data()) {
+  d %>%
+    filter(INJURIES > 0 | FATALITIES > 0) %>%
+    group_by(Event) %>%
+    summarise(Injuries   = sum(INJURIES),
+              Fatalities = sum(FATALITIES)) %>%
+    arrange(desc(Injuries + Fatalities))}
+
+deadly_plot <- function(d = read_storm_data(), n = 20) {
+  d <- within(
+    deadly(d),
+    Event <- factor(Event, levels = rev(Event), ordered = TRUE))
+  d <- melt(d[seq(from = 1, to = n),], id.vars = "Event")
+  ggplot(d) +
+    geom_bar(aes(Event, value), stat = "identity") +
+    facet_wrap(~ variable) +
+    coord_flip()}
