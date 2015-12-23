@@ -108,10 +108,11 @@ noaa_date_to_decade <- function(x) {
                  "90s", "00s", "10s"),
       ordered_result = TRUE)}
 
-deadly <- function(d = read_storm_data()) {
+deadly <- function(d = read_storm_data(),
+                   group_by_vars = ~Event) {
   d %>%
     filter(INJURIES > 0 | FATALITIES > 0) %>%
-    group_by(Event) %>%
+    group_by_(.dots = group_by_vars) %>%
     summarise(Injuries   = sum(INJURIES),
               Fatalities = sum(FATALITIES)) %>%
     arrange(desc(Injuries + Fatalities))}
@@ -125,3 +126,20 @@ deadly_plot <- function(d = read_storm_data(), n = 20) {
     geom_bar(aes(Event, value), stat = "identity") +
     facet_wrap(~ variable) +
     coord_flip()}
+
+deadly2 <- function(d = read_storm_data(),
+                    group_by_vars = list(~Decade, ~Event))
+  deadly(d, group_by_vars)
+
+deadly2_plot <- function(d = read_storm_data(), n = 10) {
+  ordered_event <- deadly(d)$Event
+  d <- deadly(d, group_by_vars = list(~Decade, ~Event)) %>%
+    mutate(Event = factor(low(Event), levels = rev(ordered_event),
+                          ordered = TRUE)) %>%
+    filter(Event %in% ordered_event[seq(from = 1, to = n)]) %>%
+    melt(measure.vars = c("Injuries", "Fatalities"))
+  ggplot(d) +
+    geom_bar(aes(Event, value, fill = variable),
+             stat = "identity", position = "dodge") +
+    coord_flip() +
+    facet_wrap(~ Decade)}
