@@ -7,7 +7,7 @@ output: html_document
 
 ## Synopsis
 
-This report summarizes the economic and human consequences of storms
+This report summarizes the economic and health consequences of storms
 and other extreme weather events. The economic data for years prior
 to 2000 are very sparse so I just reported the aggregate dollar
 amount of property and crop damage by event for the entire dataset.
@@ -16,7 +16,7 @@ surges and erosion were the most costly over that period.
 
 Tornados, other wind storms, heat and flood caused the most number
 of injuries and fatalities. There were many injury reports from
-early (20th) century years but they mainly involved tornados.
+early (20th century) years but they mainly involved tornados.
 I suspect that the numbers of deaths and so on due to non-tornado
 events simply didn't get reported.
 
@@ -36,7 +36,8 @@ injury/fatality information nor readable damage estimates. Then it
 converts the damage estimates to a straightforward dollar amount.
 It also regularizes the events described. There were many `EVTYPE`
 values that belonged together but that differed from on another in
-very insignificant ways. For example, `WINDS` and `HIGH WINDS`.
+very insignificant ways. For example, `SNOW SQUALL` and
+`SNOW SQUALLS`.
 
 ```{r warning = FALSE, message = FALSE}
 library(dplyr)
@@ -119,7 +120,9 @@ costly_plot <- function(d = read_storm_data(), prop = .999) {
               Event <- factor(Event, levels = rev(Event),
                                ordered = TRUE)) %>%
     filter(Cumu_Prop <= prop) %>%
-    melt(measure.vars = c("Total_Prop", "Total_Crop"))
+    melt(measure.vars = c("Total_Prop", "Total_Crop")) %>%
+    within(variable <- c(Total_Prop = "Property Damage",
+                         Total_Crop = "Crop Damage")[variable])
   ggplot(d) +
     geom_bar(aes(Event, value*1e-9, fill = variable),
              stat = "identity", position = "dodge") +
@@ -148,6 +151,9 @@ costly2_plot <- function(d = read_storm_data(), n = 10) {
 
 costly_plot(d)
 ```
+
+These are only the most costly weather events. The remainder that
+the plot leaves out accounted for less than 0.1% of the damage.
 
 ### Injuries and Deaths
 
@@ -191,15 +197,15 @@ deadly2_plot <- function(d = read_storm_data(), n = 10) {
 
 The plots that the above functions create describe the data as below.
 
-Over all the data:
+The `r n <- 20; n` most severe events for the entire period:
 
-```{r echo = FALSE}
-deadly_plot(d)
+```{r echo = FALSE, fig.scap = "Health Consequences from 1950 through 2011"}
+deadly_plot(d, n = n)
 ```
 
-and by decade:
+and the `r n <- 10; n` most severe by decade:
 
 ```{r echo = FALSE}
-deadly2_plot(d)
+deadly2_plot(d, n = n)
 ```
 
